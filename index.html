@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Quiz Wizard ✨</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="bg-blobs">
+    <span class="blob b1"></span>
+    <span class="blob b2"></span>
+    <span class="blob b3"></span>
+  </div>
+
+  <!-- ============ PAGE 1: API KEY ============ -->
+  <section id="page-api" class="page active">
+    <div class="card">
+      <h1 class="title">AI Quiz Wizard</h1>
+      <p class="subtitle">Enter your Gemini API key to unlock the magic ✨</p>
+
+      <label for="apiKey" class="label">Gemini API Key</label>
+      <input type="password" id="apiKey" placeholder="Paste your key here..." />
+
+      <button id="unlockBtn" class="btn primary">Unlock Generator</button>
+      <p class="hint">🔒 Your key is stored locally and used only for requests.</p>
+    </div>
+  </section>
+
+  <!-- ============ PAGE 2: CREATE QUIZ ============ -->
+  <section id="page-create" class="page">
+    <div class="card">
+      <h1 class="title">Create Quiz</h1>
+      <p class="subtitle">Customize your quiz parameters</p>
+
+      <label class="label" for="topic">Topic or Subject</label>
+      <input type="text" id="topic" placeholder="e.g. JavaScript Closures, Renaissance History..." />
+
+      <div class="row">
+        <div class="col">
+          <label class="label" for="difficulty">Difficulty</label>
+          <select id="difficulty">
+            <option value="Easy">Easy</option>
+            <option value="Intermediate" selected>Intermediate</option>
+            <option value="Hard">Hard</option>
+          </select>
+        </div>
+        <div class="col">
+          <label class="label" for="model">AI Model</label>
+          <select id="model">
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+            <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+          </select>
+        </div>
+      </div>
+
+      <label class="label" for="numQ">Number of Questions</label>
+      <select id="numQ">
+        <option value="5" selected>5 Questions</option>
+        <option value="10">10 Questions</option>
+        <option value="15">15 Questions</option>
+      </select>
+
+      <button id="generateBtn" class="btn primary">Generate Quiz</button>
+      <button id="changeKeyBtn" class="btn secondary">Change API Key</button>
+
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>Summoning your quiz... ✨</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAGE 3: QUIZ ============ -->
+  <section id="page-quiz" class="page">
+    <div class="card quiz-card">
+      <div class="quiz-top">
+        <span id="qProgress" class="progress">Question 1/5</span>
+        <span id="timer" class="timer">01:00</span>
+      </div>
+      <hr/>
+      <h2 id="quizHeader" class="quiz-header">Topic Quiz</h2>
+
+      <div class="question-box">
+        <p id="questionText" class="question-text">Question goes here?</p>
+        <div id="options" class="options"></div>
+        <p id="explanation" class="explanation hidden"></p>
+      </div>
+
+      <button id="nextBtn" class="btn primary">Next Question</button>
+    </div>
+  </section>
+
+  <!-- ============ PAGE 4: RESULTS ============ -->
+  <section id="page-result" class="page">
+    <div class="card">
+      <h1 class="title">Quiz Results</h1>
+      <div class="score-circle">
+        <span id="scoreText">5/5</span>
+      </div>
+      <p id="scoreMsg" class="score-msg">Perfect Score! You're a wizard! 🧙‍♂️</p>
+      <button id="tryAgainBtn" class="btn primary">Try Again</button>
+    </div>
+  </section>
+
+  <script src="script.js"></script>
+</body>
+</html>
