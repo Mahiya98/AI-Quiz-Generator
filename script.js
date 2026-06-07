@@ -20,6 +20,22 @@ function showPage(id) {
   $(id).classList.add("active");
 }
 
+// 🆕 Detect key type and build proper auth
+function buildAuth(apiKey, model) {
+  const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const headers = { "Content-Type": "application/json" };
+
+  if (apiKey.startsWith("AQ.")) {
+    // AQ. tokens → Bearer authorization header
+    headers["Authorization"] = `Bearer ${apiKey}`;
+    headers["x-goog-api-key"] = apiKey; // fallback for some endpoints
+    return { url: baseUrl, headers };
+  } else {
+    // AIza... keys → query parameter
+    return { url: `${baseUrl}?key=${apiKey}`, headers };
+  }
+}
+
 // ====== INIT ======
 window.addEventListener("DOMContentLoaded", () => {
   if (state.apiKey) {
@@ -40,6 +56,14 @@ window.addEventListener("DOMContentLoaded", () => {
 function handleUnlock() {
   const key = $("apiKey").value.trim();
   if (!key) { alert("Please enter your Gemini API key."); return; }
+
+  // 🆕 Validate key format
+  if (!key.startsWith("AIza") && !key.startsWith("AQ.")) {
+    if (!confirm("⚠️ This doesn't look like a standard Gemini key (should start with 'AIza' or 'AQ.'). Continue anyway?")) {
+      return;
+    }
+  }
+
   state.apiKey = key;
   localStorage.setItem("geminiApiKey", key);
   showPage("page-create");
@@ -73,7 +97,7 @@ async function handleGenerate() {
   }
 }
 
-// ====== GEMINI API CALL ======
+// ====== GEMINI API CALL (Updated) ======
 async function generateQuiz() {
   const prompt = `Generate exactly ${state.numQ} multiple-choice quiz questions on the topic "${state.topic}" with difficulty: ${state.difficulty}.
 Return ONLY a valid JSON array (no markdown, no explanation outside JSON) of objects with this shape:
@@ -86,25 +110,46 @@ Return ONLY a valid JSON array (no markdown, no explanation outside JSON) of obj
   }
 ]`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${state.model}:generateContent?key=${state.apiKey}`;
+  // 🆕 Build proper auth based on key type
+  const { url, headers } = buildAuth(state.apiKey, state.model);
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.8, responseMimeType: "application/json" }
-    })
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.8,
+      responseMimeType: "application/json"
+    }
   });
+
+  let res = await fetch(url, { method: "POST", headers, body });
+
+  // 🆕 Auto-fallback: if AQ. token fails with Bearer, try x-goog-api-key only
+  if (!res.ok && state.apiKey.startsWith("AQ.")) {
+    const fallbackHeaders = {
+      "Content-Type": "application/json",
+      "x-goog-api-key": state.apiKey
+    };
+    const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/${state.model}:generateContent`;
+    res = await fetch(fallbackUrl, { method: "POST", headers: fallbackHeaders, body });
+  }
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error?.message || `HTTP ${res.status}`);
+    const errMsg = errData.error?.message || `HTTP ${res.status}`;
+
+    // 🆕 Helpful hint for AQ. token issues
+    if (state.apiKey.startsWith("AQ.") && (errMsg.includes("denied") || errMsg.includes("invalid") || errMsg.includes("expired"))) {
+      throw new Error(
+        `${errMsg}\n\n💡 Tip: AQ. tokens may be short-lived OAuth tokens. ` +
+        `Try regenerating it from aistudio.google.com/apikey, ` +
+        `or request a standard AIza key by enabling billing on your Google Cloud project.`
+      );
+    }
+    throw new Error(errMsg);
   }
 
   const data = await res.json();
   let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  // Clean any stray markdown fences
   text = text.replace(/```json|```/g, "").trim();
 
   const questions = JSON.parse(text);
@@ -168,7 +213,6 @@ function startTimer() {
     if (state.timeLeft <= 0) {
       clearInterval(state.timer);
       const q = state.questions[state.current];
-      // auto-reveal
       if (!state.answered) {
         state.answered = true;
         document.querySelectorAll(".option").forEach(o => {
