@@ -1,10 +1,26 @@
-// ====== STATE ======
+// ============ CONFIG ============
+// Your Google Sheet (the questions one)
+const SHEET_ID = "1kY_5uis5_tWyPG8-fCDwgZKO7CvXcidJ-Dq7pVOG7ZY";
+const SHEET_GID = "0";
+const QUESTIONS_CSV_URL =
+  `https://docs.google.com/spreadsheets/d/e/2PACX-1vSQfIW4RYZwilCYUEMzuWYuAruHlMxxT3HUqlqg2Vyamv7xf4_1ZxXi1exsX1Tw8YqKjNh7ShA5NzIz/pub?gid=96178082&single=true&output=csv`;
+
+// 👇 PASTE YOUR DEPLOYED APPS SCRIPT WEB APP URL HERE
+const RESULTS_WEBAPP_URL = "https://script.google.com/a/macros/akijresource.com/s/AKfycbwNuZ4IIcJ6obZ2EG0mzaZEFaqAn5rIjyRBvXWT_l_uQKGOPjVP4y_Rlv1mf_y7iNGt/exec";
+
+// Google Sheet view link (for the "Download" button — opens results sheet)
+// 👇 Replace with YOUR results sheet ID (the one your Apps Script writes to)
+const RESULTS_SHEET_ID = "1kY_5uis5_tWyPG8-fCDwgZKO7CvXcidJ-Dq7pVOG7ZY";
+const RESULTS_DOWNLOAD_URL =
+  `https://docs.google.com/spreadsheets/d/${RESULTS_SHEET_ID}/export?format=xlsx`;
+
+const TOTAL_QUESTIONS = 10;
+
+// ============ STATE ============
 let state = {
-  apiKey: localStorage.getItem("geminiApiKey") || "",
-  topic: "",
-  difficulty: "Intermediate",
-  model: "gemini-2.5-flash",
-  numQ: 5,
+  userName: "",
+  userId: "",
+  allQuestions: [],
   questions: [],
   current: 0,
   score: 0,
@@ -13,169 +29,161 @@ let state = {
   answered: false,
 };
 
-// ====== HELPERS ======
+// ============ HELPERS ============
 const $ = (id) => document.getElementById(id);
 function showPage(id) {
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
   $(id).classList.add("active");
 }
-
-// 🆕 Detect key type and build proper auth
-function buildAuth(apiKey, model) {
-  const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const headers = { "Content-Type": "application/json" };
-
-  if (apiKey.startsWith("AQ.")) {
-    // AQ. tokens → Bearer authorization header
-    headers["Authorization"] = `Bearer ${apiKey}`;
-    headers["x-goog-api-key"] = apiKey; // fallback for some endpoints
-    return { url: baseUrl, headers };
-  } else {
-    // AIza... keys → query parameter
-    return { url: `${baseUrl}?key=${apiKey}`, headers };
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
+  return a;
 }
 
-// ====== INIT ======
+// ============ INIT ============
 window.addEventListener("DOMContentLoaded", () => {
-  if (state.apiKey) {
-    $("apiKey").value = state.apiKey;
-  }
-
-  $("unlockBtn").addEventListener("click", handleUnlock);
-  $("generateBtn").addEventListener("click", handleGenerate);
-  $("changeKeyBtn").addEventListener("click", () => showPage("page-api"));
+  $("startBtn").addEventListener("click", handleStart);
   $("nextBtn").addEventListener("click", handleNext);
   $("tryAgainBtn").addEventListener("click", () => {
     resetQuiz();
-    showPage("page-create");
+    showPage("page-user");
+  });
+  $("downloadBtn").addEventListener("click", () => {
+    window.open(RESULTS_DOWNLOAD_URL, "_blank");
   });
 });
 
-// ====== PAGE 1: UNLOCK ======
-function handleUnlock() {
-  const key = $("apiKey").value.trim();
-  if (!key) { alert("Please enter your Gemini API key."); return; }
+// ============ PAGE 1: START ============
+async function handleStart() {
+  const name = $("userName").value.trim();
+  const id = $("userId").value.trim();
+  if (!name || !id) { alert("Please enter both your Name and ID."); return; }
 
-  // 🆕 Validate key format
-  if (!key.startsWith("AIza") && !key.startsWith("AQ.")) {
-    if (!confirm("⚠️ This doesn't look like a standard Gemini key (should start with 'AIza' or 'AQ.'). Continue anyway?")) {
-      return;
-    }
-  }
-
-  state.apiKey = key;
-  localStorage.setItem("geminiApiKey", key);
-  showPage("page-create");
-}
-
-// ====== PAGE 2: GENERATE ======
-async function handleGenerate() {
-  const topic = $("topic").value.trim();
-  if (!topic) { alert("Please enter a topic."); return; }
-
-  state.topic = topic;
-  state.difficulty = $("difficulty").value;
-  state.model = $("model").value;
-  state.numQ = parseInt($("numQ").value);
+  state.userName = name;
+  state.userId = id;
 
   $("loading").classList.remove("hidden");
-  $("generateBtn").disabled = true;
+  $("startBtn").disabled = true;
 
   try {
-    const questions = await generateQuiz();
-    state.questions = questions;
+    const allQs = await fetchQuestionsFromSheet();
+    if (allQs.length === 0) throw new Error("No questions found in sheet.");
+
+    // Shuffle and pick 10 (or all if less than 10)
+    const shuffled = shuffle(allQs);
+    state.questions = shuffled.slice(0, Math.min(TOTAL_QUESTIONS, shuffled.length));
     state.current = 0;
     state.score = 0;
+
     showPage("page-quiz");
     renderQuestion();
   } catch (err) {
-    alert("Failed to generate quiz: " + err.message);
+    alert("Failed to load questions: " + err.message +
+      "\n\nMake sure the sheet is shared as 'Anyone with the link → Viewer'.");
   } finally {
     $("loading").classList.add("hidden");
-    $("generateBtn").disabled = false;
+    $("startBtn").disabled = false;
   }
 }
 
-// ====== GEMINI API CALL (Updated) ======
-async function generateQuiz() {
-  const prompt = `Generate exactly ${state.numQ} multiple-choice quiz questions on the topic "${state.topic}" with difficulty: ${state.difficulty}.
-Return ONLY a valid JSON array (no markdown, no explanation outside JSON) of objects with this shape:
-[
-  {
-    "question": "string",
-    "options": ["opt1","opt2","opt3","opt4"],
-    "answer": "the exact correct option string",
-    "explanation": "short helpful explanation"
-  }
-]`;
+// ============ FETCH QUESTIONS FROM GOOGLE SHEET ============
+async function fetchQuestionsFromSheet() {
+  const res = await fetch(QUESTIONS_CSV_URL);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const csv = await res.text();
+  return parseSheetCSV(csv);
+}
 
-  // 🆕 Build proper auth based on key type
-  const { url, headers } = buildAuth(state.apiKey, state.model);
-
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.8,
-      responseMimeType: "application/json"
+// Simple CSV parser that handles quoted multi-line cells
+function parseCSV(text) {
+  const rows = [];
+  let row = [], cell = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], next = text[i + 1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') { cell += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else { cell += c; }
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(cell); cell = ""; }
+      else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ""; }
+      else if (c === '\r') { /* skip */ }
+      else cell += c;
     }
-  });
-
-  let res = await fetch(url, { method: "POST", headers, body });
-
-  // 🆕 Auto-fallback: if AQ. token fails with Bearer, try x-goog-api-key only
-  if (!res.ok && state.apiKey.startsWith("AQ.")) {
-    const fallbackHeaders = {
-      "Content-Type": "application/json",
-      "x-goog-api-key": state.apiKey
-    };
-    const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/${state.model}:generateContent`;
-    res = await fetch(fallbackUrl, { method: "POST", headers: fallbackHeaders, body });
   }
+  if (cell.length > 0 || row.length > 0) { row.push(cell); rows.push(row); }
+  return rows;
+}
 
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    const errMsg = errData.error?.message || `HTTP ${res.status}`;
+// Parse the sheet structure:
+// Col A = Serial, Col B = Question, Col C = "A. ...\nB. ...\nC. ...\nD. ...\n\nউত্তর: C"
+function parseSheetCSV(csv) {
+  const rows = parseCSV(csv);
+  const questions = [];
 
-    // 🆕 Helpful hint for AQ. token issues
-    if (state.apiKey.startsWith("AQ.") && (errMsg.includes("denied") || errMsg.includes("invalid") || errMsg.includes("expired"))) {
-      throw new Error(
-        `${errMsg}\n\n💡 Tip: AQ. tokens may be short-lived OAuth tokens. ` +
-        `Try regenerating it from aistudio.google.com/apikey, ` +
-        `or request a standard AIza key by enabling billing on your Google Cloud project.`
-      );
+  // Skip header row (row 0)
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || r.length < 3) continue;
+
+    const questionText = (r[1] || "").trim();
+    const optionsBlock = (r[2] || "").trim();
+    if (!questionText || !optionsBlock) continue;
+
+    const lines = optionsBlock.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    const options = [];
+    let answerLetter = "";
+
+    for (const line of lines) {
+      // Match option lines like "A. something" or "A) something"
+      const optMatch = line.match(/^([A-D])[\.\)]\s*(.+)$/);
+      if (optMatch) {
+        options.push({ letter: optMatch[1], text: optMatch[2].trim() });
+        continue;
+      }
+      // Match the answer line — supports "উত্তর: C", "Answer: C", "Ans: C"
+      const ansMatch = line.match(/(?:উত্তর|Answer|Ans)\s*[:：]\s*([A-D])/i);
+      if (ansMatch) {
+        answerLetter = ansMatch[1].toUpperCase();
+      }
     }
-    throw new Error(errMsg);
-  }
 
-  const data = await res.json();
-  let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  text = text.replace(/```json|```/g, "").trim();
+    if (options.length < 2 || !answerLetter) continue;
 
-  const questions = JSON.parse(text);
-  if (!Array.isArray(questions) || questions.length === 0) {
-    throw new Error("Invalid response from Gemini");
+    const correctOpt = options.find(o => o.letter === answerLetter);
+    if (!correctOpt) continue;
+
+    questions.push({
+      question: questionText,
+      options: options.map(o => o.text),
+      answer: correctOpt.text,
+    });
   }
   return questions;
 }
 
-// ====== PAGE 3: QUIZ ======
+// ============ QUIZ PAGE ============
 function renderQuestion() {
   const q = state.questions[state.current];
   state.answered = false;
 
   $("qProgress").textContent = `Question ${state.current + 1}/${state.questions.length}`;
-  $("quizHeader").textContent = `${state.topic} Quiz`;
+  $("quizHeader").textContent = `Hello ${state.userName} — Good luck!`;
   $("questionText").textContent = q.question;
-  $("explanation").classList.add("hidden");
-  $("explanation").textContent = q.explanation || "";
 
   const isLast = state.current === state.questions.length - 1;
   $("nextBtn").textContent = isLast ? "Finish Quiz" : "Next Question";
 
   const optsBox = $("options");
   optsBox.innerHTML = "";
-  q.options.forEach(opt => {
+  // Shuffle the options too so order varies
+  shuffle(q.options).forEach(opt => {
     const div = document.createElement("div");
     div.className = "option";
     div.textContent = opt;
@@ -198,7 +206,6 @@ function selectOption(el, chosen, correct) {
   });
 
   if (chosen === correct) state.score++;
-  $("explanation").classList.remove("hidden");
 }
 
 function startTimer() {
@@ -207,8 +214,8 @@ function startTimer() {
   clearInterval(state.timer);
   state.timer = setInterval(() => {
     state.timeLeft--;
-    const m = String(Math.floor(state.timeLeft / 60)).padStart(2,"0");
-    const s = String(state.timeLeft % 60).padStart(2,"0");
+    const m = String(Math.floor(state.timeLeft / 60)).padStart(2, "0");
+    const s = String(state.timeLeft % 60).padStart(2, "0");
     $("timer").textContent = `${m}:${s}`;
     if (state.timeLeft <= 0) {
       clearInterval(state.timer);
@@ -219,13 +226,15 @@ function startTimer() {
           o.classList.add("disabled");
           if (o.textContent === q.answer) o.classList.add("correct");
         });
-        $("explanation").classList.remove("hidden");
       }
     }
   }, 1000);
 }
 
 function handleNext() {
+  if (!state.answered) {
+    if (!confirm("You haven't answered this question. Skip it?")) return;
+  }
   if (state.current < state.questions.length - 1) {
     state.current++;
     renderQuestion();
@@ -235,15 +244,16 @@ function handleNext() {
   }
 }
 
-// ====== PAGE 4: RESULTS ======
-function showResults() {
+// ============ RESULTS PAGE ============
+async function showResults() {
   const total = state.questions.length;
   const score = state.score;
   $("scoreText").textContent = `${score}/${total}`;
+  $("userInfoLine").textContent = `${state.userName} (ID: ${state.userId})`;
 
-  let msg;
   const pct = score / total;
-  if (pct === 1) msg = "Perfect Score! You're a wizard! 🧙‍♂️";
+  let msg;
+  if (pct === 1) msg = "Perfect Score! You're a wizard! 🧙";
   else if (pct >= 0.8) msg = "Excellent! Almost perfect! ✨";
   else if (pct >= 0.6) msg = "Great job! Keep going! 🌟";
   else if (pct >= 0.4) msg = "Not bad — practice makes perfect! 💪";
@@ -251,6 +261,33 @@ function showResults() {
   $("scoreMsg").textContent = msg;
 
   showPage("page-result");
+
+  // Save to Google Sheet via Apps Script
+  saveResultToSheet({
+    name: state.userName,
+    id: state.userId,
+    score: score,
+    total: total,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+async function saveResultToSheet(payload) {
+  if (!RESULTS_WEBAPP_URL || RESULTS_WEBAPP_URL.startsWith("PASTE")) {
+    console.warn("Results web app URL not configured — skipping save.");
+    return;
+  }
+  try {
+    // Use no-cors so the browser doesn't block the request to Apps Script
+    await fetch(RESULTS_WEBAPP_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.error("Failed to save result:", err);
+  }
 }
 
 function resetQuiz() {
