@@ -1,18 +1,12 @@
 // ============ CONFIG ============
-// Your Google Sheet (the questions one)
-const SHEET_ID = "1kY_5uis5_tWyPG8-fCDwgZKO7CvXcidJ-Dq7pVOG7ZY";
-const SHEET_GID = "0";
+// Questions sheet
+const SHEET_ID = "1ytRXEX6z50uYTXIS0syCu8JCokroVOnbFZvxKEGzLwU";
+const SHEET_GID = "1992192089";
 const QUESTIONS_CSV_URL =
-  `https://docs.google.com/spreadsheets/d/e/2PACX-1vSQfIW4RYZwilCYUEMzuWYuAruHlMxxT3HUqlqg2Vyamv7xf4_1ZxXi1exsX1Tw8YqKjNh7ShA5NzIz/pub?gid=96178082&single=true&output=csv`;
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
 
 // 👇 PASTE YOUR DEPLOYED APPS SCRIPT WEB APP URL HERE
-const RESULTS_WEBAPP_URL = "https://script.google.com/a/macros/akijresource.com/s/AKfycbwNuZ4IIcJ6obZ2EG0mzaZEFaqAn5rIjyRBvXWT_l_uQKGOPjVP4y_Rlv1mf_y7iNGt/exec";
-
-// Google Sheet view link (for the "Download" button — opens results sheet)
-// 👇 Replace with YOUR results sheet ID (the one your Apps Script writes to)
-const RESULTS_SHEET_ID = "1kY_5uis5_tWyPG8-fCDwgZKO7CvXcidJ-Dq7pVOG7ZY";
-const RESULTS_DOWNLOAD_URL =
-  `https://docs.google.com/spreadsheets/d/${RESULTS_SHEET_ID}/export?format=xlsx`;
+const RESULTS_WEBAPP_URL = "PASTE_YOUR_APPS_SCRIPT_WEBAPP_URL_HERE";
 
 const TOTAL_QUESTIONS = 10;
 
@@ -20,7 +14,6 @@ const TOTAL_QUESTIONS = 10;
 let state = {
   userName: "",
   userId: "",
-  allQuestions: [],
   questions: [],
   current: 0,
   score: 0,
@@ -52,9 +45,6 @@ window.addEventListener("DOMContentLoaded", () => {
     resetQuiz();
     showPage("page-user");
   });
-  $("downloadBtn").addEventListener("click", () => {
-    window.open(RESULTS_DOWNLOAD_URL, "_blank");
-  });
 });
 
 // ============ PAGE 1: START ============
@@ -73,7 +63,6 @@ async function handleStart() {
     const allQs = await fetchQuestionsFromSheet();
     if (allQs.length === 0) throw new Error("No questions found in sheet.");
 
-    // Shuffle and pick 10 (or all if less than 10)
     const shuffled = shuffle(allQs);
     state.questions = shuffled.slice(0, Math.min(TOTAL_QUESTIONS, shuffled.length));
     state.current = 0;
@@ -98,7 +87,7 @@ async function fetchQuestionsFromSheet() {
   return parseSheetCSV(csv);
 }
 
-// Simple CSV parser that handles quoted multi-line cells
+// CSV parser (handles quoted multi-line cells)
 function parseCSV(text) {
   const rows = [];
   let row = [], cell = "", inQuotes = false;
@@ -120,13 +109,11 @@ function parseCSV(text) {
   return rows;
 }
 
-// Parse the sheet structure:
-// Col A = Serial, Col B = Question, Col C = "A. ...\nB. ...\nC. ...\nD. ...\n\nউত্তর: C"
+// Parse: Col A = Serial, Col B = Question, Col C = options + answer
 function parseSheetCSV(csv) {
   const rows = parseCSV(csv);
   const questions = [];
 
-  // Skip header row (row 0)
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     if (!r || r.length < 3) continue;
@@ -141,13 +128,11 @@ function parseSheetCSV(csv) {
     let answerLetter = "";
 
     for (const line of lines) {
-      // Match option lines like "A. something" or "A) something"
       const optMatch = line.match(/^([A-D])[\.\)]\s*(.+)$/);
       if (optMatch) {
         options.push({ letter: optMatch[1], text: optMatch[2].trim() });
         continue;
       }
-      // Match the answer line — supports "উত্তর: C", "Answer: C", "Ans: C"
       const ansMatch = line.match(/(?:উত্তর|Answer|Ans)\s*[:：]\s*([A-D])/i);
       if (ansMatch) {
         answerLetter = ansMatch[1].toUpperCase();
@@ -182,7 +167,6 @@ function renderQuestion() {
 
   const optsBox = $("options");
   optsBox.innerHTML = "";
-  // Shuffle the options too so order varies
   shuffle(q.options).forEach(opt => {
     const div = document.createElement("div");
     div.className = "option";
@@ -262,31 +246,35 @@ async function showResults() {
 
   showPage("page-result");
 
-  // Save to Google Sheet via Apps Script
-  saveResultToSheet({
+  // Auto-save to Google Sheet
+  $("saveStatus").textContent = "💾 Saving your result...";
+  const saved = await saveResultToSheet({
     name: state.userName,
     id: state.userId,
-    score: score,
-    total: total,
-    timestamp: new Date().toISOString(),
+    score: `${score}/${total}`,
   });
+  $("saveStatus").textContent = saved
+    ? "✅ Your result has been saved!"
+    : "⚠️ Could not save result (check your internet).";
 }
 
 async function saveResultToSheet(payload) {
   if (!RESULTS_WEBAPP_URL || RESULTS_WEBAPP_URL.startsWith("PASTE")) {
     console.warn("Results web app URL not configured — skipping save.");
-    return;
+    return false;
   }
   try {
-    // Use no-cors so the browser doesn't block the request to Apps Script
+    // no-cors mode: browser won't read response, but Apps Script will receive data
     await fetch(RESULTS_WEBAPP_URL, {
       method: "POST",
       mode: "no-cors",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });
+    return true;
   } catch (err) {
     console.error("Failed to save result:", err);
+    return false;
   }
 }
 
