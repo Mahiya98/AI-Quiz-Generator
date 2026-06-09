@@ -6,7 +6,7 @@ const QUESTIONS_CSV_URL =
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
 
 // 👇 PASTE YOUR DEPLOYED APPS SCRIPT WEB APP URL HERE
-const RESULTS_WEBAPP_URL = "PASTE_YOUR_APPS_SCRIPT_WEBAPP_URL_HERE";
+const RESULTS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwKomp-D090kCV8alMb7T6X8_0cK0o-FOxUFQnJARvtNwCB6CWHzU3n9en_WrjaDZJ3nQ/exec";
 
 const TOTAL_QUESTIONS = 10;
 
