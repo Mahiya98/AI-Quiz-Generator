@@ -1,12 +1,12 @@
 // ============ CONFIG ============
 // Questions sheet
-const SHEET_ID = "1ytRXEX6z50uYTXIS0syCu8JCokroVOnbFZvxKEGzLwU";
-const SHEET_GID = "1992192089";
+const SHEET_ID = "1kY_5uis5_tWyPG8-fCDwgZKO7CvXcidJ-Dq7pVOG7ZY";
+const SHEET_GID = "96178082";
 const QUESTIONS_CSV_URL =
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+  `https://docs.google.com/spreadsheets/d/e/2PACX-1vSQfIW4RYZwilCYUEMzuWYuAruHlMxxT3HUqlqg2Vyamv7xf4_1ZxXi1exsX1Tw8YqKjNh7ShA5NzIz/pub?gid=96178082&single=true&output=csv`;
 
 // 👇 PASTE YOUR DEPLOYED APPS SCRIPT WEB APP URL HERE
-const RESULTS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwKomp-D090kCV8alMb7T6X8_0cK0o-FOxUFQnJARvtNwCB6CWHzU3n9en_WrjaDZJ3nQ/exec";
+const RESULTS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxyHvQlBixzBiOIaf-eLC-oB67dC7rMkJqeHf385HWkM_L_L10rJ8k36F-9qPhanLEK/exec";
 
 const TOTAL_QUESTIONS = 10;
 
